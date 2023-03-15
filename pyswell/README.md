@@ -1,7 +1,9 @@
 ```
-pyswell.py - CLI Interface for Stairwell Inception
---------------------------------------------------
-Commands:
-mkasset    - Create a new asset
-uploadpath - Recursively upload a path (requires ASSET_ID set in script)
+usage: pyswell.py [-h] {mkasset,upload} ...
+
+positional arguments:
+  {mkasset,upload}  available commands
+
+options:
+  -h, --help        show this help message and exit
 ```
