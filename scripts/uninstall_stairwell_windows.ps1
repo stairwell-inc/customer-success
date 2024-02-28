@@ -47,6 +47,7 @@ if($PgmDir -eq $True) {
         # Call msiexec with the uninstall command, package GUID, the maintenance token, quiet uninstall, no reboot
         # The reboot is still required to complete the uninstall, but did not want it to happen automatically
         Start-Process "C:\Windows\System32\msiexec.exe" -ArgumentList /x, $($Product.IdentifyingNumber), MAINTENANCE_TOKEN=$MaintToken, /quiet, /norestart
+        Stop-Service -Name "StairwellForwarder" -Force -ErrorAction SilentlyContinue
     }
     catch {
         Write-Output "An Error Occurred:"
@@ -54,13 +55,18 @@ if($PgmDir -eq $True) {
     }
 }
 
+# Update ACL so we can delete the folder
+$acl = Get-Acl "C:\Program Files\Stairwell"
+$accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("everyone","FullControl","ContainerInherit,ObjectInherit","None","Allow")
+$acl.SetAccessRule($accessRule)
+$acl | Set-Acl "C:\Program Files\Stairwell"
 
 # Lastly we clean up any files left behind
 if($PgmDir -eq $True) {
-   Remove-Item "C:\Program Files\Stairwell" -Recurse -Force
+   Remove-Item "C:\Program Files\Stairwell" -Recurse -Force -ErrorAction SilentlyContinue
 }
 if($BundleDir -eq $True) {
-    Remove-Item $Bundle -Recurse -Force
+    Remove-Item $Bundle -Recurse -Force -ErrorAction SilentlyContinue
 }
 Write-Output "Uninstall script completed. Program Directory and Bundle Cache have been removed."
 Write-Output "Please schedule a reboot to complete the uninstall."
