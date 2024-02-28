@@ -47,6 +47,7 @@ if($PgmDir -eq $True) {
         # Call msiexec with the uninstall command, package GUID, the maintenance token, quiet uninstall, no reboot
         # The reboot is still required to complete the uninstall, but did not want it to happen automatically
         Start-Process "C:\Windows\System32\msiexec.exe" -ArgumentList /x, $($Product.IdentifyingNumber), MAINTENANCE_TOKEN=$MaintToken, /quiet, /norestart
+        Stop-Service -Name "StairwellForwarder" -Force -ErrorAction SilentlyContinue
     }
     catch {
         Write-Output "An Error Occurred:"
