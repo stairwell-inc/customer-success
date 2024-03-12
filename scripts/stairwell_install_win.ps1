@@ -46,7 +46,7 @@
         $SWCheck = Test-Path 'C:\Program Files\Stairwell'
         if($SWCheck) {
             Write-Verbose 'Previous install detected in C:\Program Files\Stairwell'
-            Write-Verbose 'Please verify the previous version was uninstalled corectly'
+            Write-Verbose 'Please verify the previous version was uninstalled correctly'
             Write-Verbose 'by using the installer to repair, then uninstall fully before proceeding.'
             Exit
         }
@@ -109,11 +109,11 @@
         Write-Verbose "Installing Forwarder from $($BundleDir)"
         if($NoBackscan) {
             Write-Verbose "Backscan is disabled"
-            Start-Process -FilePath $BundleDir -Wait -NoNewWindow -ArgumentList /install, ENVIRONMENT_ID=$EnvironmentId, TOKEN=$ForwarderToken, DOSCAN=0, /quiet, /norestart
+            Start-Process -FilePath $BundleDir -Wait -NoNewWindow -ArgumentList /install, ENVIRONMENT_ID=$EnvironmentId, TOKEN=$ForwarderToken, DOSCAN=0, /log C:\\stairwell.log, /quiet, /norestart
         }
         else {
             Write-Verbose "Backscan enabled"
-            Start-Process -FilePath $BundleDir -Wait -NoNewWindow -ArgumentList /install, ENVIRONMENT_ID=$EnvironmentId, TOKEN=$ForwarderToken, /quiet, /norestart
+            Start-Process -FilePath $BundleDir -Wait -NoNewWindow -ArgumentList /install, ENVIRONMENT_ID=$EnvironmentId, TOKEN=$ForwarderToken, /log C:\\stairwell.log, /quiet, /norestart
         }
 
         # Quick pause to ensure the service is started on slower systems
