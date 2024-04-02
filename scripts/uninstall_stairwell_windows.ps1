@@ -1,21 +1,35 @@
 <#
     Use this script to uninstall the Stairwell forwarder on Windows OS machines.
-    This script requires your forwarder maintenance token https://docs.stairwell.com/docs/find-a-maintenance-token
-    IMPORTANT NOTE: for 1.4.0 and 1.4.1 uninstalls this will cause a machine reboot!
+    If uninstalling 1.4.x this script requires your forwarder maintenance token https://docs.stairwell.com/docs/find-a-maintenance-token
+    IMPORTANT NOTE: For 1.4.x uninstalls, this will require a machine reboot!
+    ALSO: We use the Environment Id and Forwarder Token here to ensure the uninstall goes smoothly by "reparing" the install first (1.4.x only)
+
     Visit https://docs.stairwell.com for further assistance.
 
-    PS .\stairwell_uninstall.ps1 -mainttoken <MAINTENANCE TOKEN>
+    PS .\stairwell_uninstall_windows.ps1 -MaintToken <MAINTENANCE TOKEN> -Env_Id <ENV_ID> -Verbose
 
 #>
 
 param(
     [Parameter(Mandatory=$False)]
-    [string]$MaintToken
+    [string]$MaintToken,
+
+    [Parameter(Mandatory=$False)]
+    [string]$env_id,
+
+    [Parameter(Mandatory=$False)]
+    [string]$Forwarder_Token,
+
+    [Parameter(Mandatory=$False)]
+    [string]$Installer
 )
 
-# Test for previous forwarder versions
+Write-Output "Uninstalling and/or reparing a broken uninstall, please wait for confirmation this is complete..."
+
+# Test for previous forwarder versions (Inception versions)
 $Inception = Test-Path "C:\Program Files\Stairwell\Inception"
 if($Inception -eq $True) {
+    Write-Verbose "Found an Inception version forwarder, begining uninstall"
     try {
         Get-Package "Inception Forwarder" | Uninstall-Package -AllVersions
         Write-Output "Stairwell Forwarder Uninstalled"
@@ -28,45 +42,84 @@ if($Inception -eq $True) {
     
 }
 
-# Test for forwarder versions 1.4.0 and 1.4.1
-$PgmDir = Test-Path "C:\Program Files\Stairwell"
-if($PgmDir -eq $True) {
-    if($Null -eq $MaintToken) {
-        Write-Output "This requires a forwarder maintenance token from your environment"
-        Write-Output "Visit https://docs.stairwell.com/docs/find-a-maintenance-token for details"
-        $MaintToken = Read-Host -Prompt "Please enter your Stairwell Maintenance Token"
+# Test for specific 1.4.x versions, these require several specific things to uninstall successfully.
+# First we need to determine which specific version is installed then download the installer bundle.
+# Uninstallation w/the installer package is highly recommended, lots of problems otherwise.
+
+# Attempt to find our installed version of the forwarder
+$Package = Get-package "Stairwell Forwarder"
+$WmiObj = Get-WmiObject -Class Win32_Product -Filter "Name = 'Stairwell Forwarder'"
+
+# If this is a 1.4.x uninstall, ensure we have the required tokens
+if($WmiObj.version -eq "1.4.0.886" -or $Package.version -eq "1.4.0.886" -or $WmiObj.version -eq "1.4.1.896" -or $Package.version -eq "1.4.1.896") {
+    # Check for needed creds
+    if([string]::IsNullOrEmpty($MaintToken)) {
+        Write-Verbose "Maintenance token not supplied, prompting user for value."
+        $MaintToken = Read-Host -Prompt "Please enter your forwarder maintenance token. Visit https://docs.stairwell.com for details."
+    }
+    if([string]::IsNullOrEmpty($env_id)) {
+        Write-Verbose "Environment Id not supplied, prompting user for value."
+        $env_id = Read-Host -Prompt "Please enter your Environment Id. Visit https://docs.stairwell.com for details."
+    }
+    if([string]::IsNullOrEmpty($Forwarder_Token)) {
+        Write-Verbose "File Forwarder token not supplied, prompting user for value."
+        $Forwarder_Token = Read-Host -Prompt "Please enter your File Forwarder Token. Visit https://docs.stairwell.com for details."
     }
 
-    
-    try {
-        # Find the MSI system GUID
-        $Product = Get-CimInstance -Class Win32_Product | Where-Object Name -eq "Stairwell Forwarder"
-        $Bundle = Get-package "Stairwell Forwarder" | % { $_.metadata['BundleCachePath'] } | Split-Path -Parent
-        $BundleDir = Test-Path $Bundle
+    Start-Sleep -Milliseconds 5
+    if([string]::IsNullOrEmpty($MaintToken) -or [string]::IsNullOrEmpty($env_id) -or [string]::IsNullOrEmpty($Forwarder_Token)) {
+        Write-Error "Missing required value(s). Please supply the Maintenance Token, Environment Id, and the File Forwarder Token to ensure the install completes."
+        Exit
+    }
+}
 
-        # Call msiexec with the uninstall command, package GUID, the maintenance token, quiet uninstall, no reboot
-        # The reboot is still required to complete the uninstall, but did not want it to happen automatically
-        Start-Process "C:\Windows\System32\msiexec.exe" -ArgumentList /x, $($Product.IdentifyingNumber), MAINTENANCE_TOKEN=$MaintToken, /quiet, /norestart
-        Stop-Service -Name "StairwellForwarder" -Force -ErrorAction SilentlyContinue
+# Begin the 1.4.x uninstall process...
+if([string]::IsNullOrEmpty($Installer)) {
+    # Requesting the installer package to perform the uninstall right the first time even in the event of a previous borked uninstall
+    if($WmiObj.version -eq "1.4.0.886" -or $Package.version -eq "1.4.0.886") {        
+        Write-Verbose "Found installed version 1.4.0, downloading bundled installer..."
+        Invoke-WebRequest -Uri "https://downloads.stairwell.com/windows/1.4.0/StairwellForwarderBundle-1.4.0.886.exe" -OutFile "C:\Windows\Temp\StairwellForwarderBundle.exe"
+    } elseif($WmiObj.version -eq "1.4.1.896" -or $Package.version -eq "1.4.1.896") {
+        Write-Verbose "Found installed version 1.4.1, downloading bundled installer..."
+        Invoke-WebRequest -Uri "https://downloads.stairwell.com/windows/1.4.1/StairwellForwarderBundle-1.4.1.896.exe" -OutFile "C:\Windows\Temp\StairwellForwarderBundle.exe"
+    } else {
+        Write-Output "Previous installation of Stairwell forwarder not found. Please check the machine and try again or contact Stairwell support."
+        Exit
+    }
+
+    try {
+        # Repair the install as a precaution. Ensures the uninstall completes correctly.
+        Write-Verbose "Attempting repair of installation (precautionary step)."
+        Start-Process "C:\Windows\Temp\StairwellForwarderBundle.exe" -ArgumentList /repair, ENVIRONMENT_ID=$env_id, TOKEN=$Forwarder_Token, /quiet, /norestart
+        Write-Verbose "Short pause for slower systems to ensure the service is stopped."
+        Start-Sleep -Milliseconds 800
+        # Perform the full uninstall.
+        Write-Verbose "Performing the uninstallation using the downloaded installer bundle located at C:\Windows\Temp\StairwellForwarderBundle.exe"
+        Start-Process "C:\Windows\Temp\StairwellForwarderBundle.exe" -ArgumentList /uninstall, MAINTENANCE_TOKEN=$MaintToken, /quiet, /norestart
+        Write-Output "Please schedule a reboot to complete the uninstall."
     }
     catch {
         Write-Output "An Error Occurred:"
         Write-Output $_
     }
+    
+} else {
+    # Attempt the uninstallation if the installer bundle is supplied as an argument.
+    try {
+        # Repair the install as a precaution. Ensures the uninstall completes correctly.
+        Write-Verbose "Attempting repair of installation (precautionary step)."
+        Start-Process $Installer -ArgumentList /repair, ENVIRONMENT_ID=$env_id, TOKEN=$Forwarder_Token, /quiet, /norestart
+        Write-Verbose "Short pause for slower systems to ensure the service is stopped."
+        Start-Sleep -Milliseconds 800
+        # Perform the full uninstall.
+        Write-Verbose "Performing the uninstallation using the downloaded installer bundle located at $($Installer)"
+        Start-Process $Installer -ArgumentList /uninstall, MAINTENANCE_TOKEN=$MaintToken, /quiet, /norestart
+        Write-Output "Please schedule a reboot to complete the uninstall."
+    }
+    catch {
+        Write-Output "An Error Occurred:"
+        Write-Output $_
+    }
+    
+    
 }
-
-# Update ACL so we can delete the folder
-$acl = Get-Acl "C:\Program Files\Stairwell"
-$accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("everyone","FullControl","ContainerInherit,ObjectInherit","None","Allow")
-$acl.SetAccessRule($accessRule)
-$acl | Set-Acl "C:\Program Files\Stairwell"
-
-# Lastly we clean up any files left behind
-if($PgmDir -eq $True) {
-   Remove-Item "C:\Program Files\Stairwell" -Recurse -Force -ErrorAction SilentlyContinue
-}
-if($BundleDir -eq $True) {
-    Remove-Item $Bundle -Recurse -Force -ErrorAction SilentlyContinue
-}
-Write-Output "Uninstall script completed. Program Directory and Bundle Cache have been removed."
-Write-Output "Please schedule a reboot to complete the uninstall."
