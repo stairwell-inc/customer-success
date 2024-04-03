@@ -25,13 +25,19 @@ param(
 )
 
 Write-Output "Uninstalling and/or reparing a broken uninstall, please wait for confirmation this is complete..."
+$ServiceDetails = Get-Process SwellService -FileVersionInfo -ErrorAction SilentlyContinue
+if($ServiceDetails) {
+    $ProductVersion = $ServiceDetails.ProductVersion
+    $FileVersion = $ServiceDetails.FileVersion
+    Write-Verbose "Running instance of Stairwell Forwarder found. Version $($ProductVersion)"
+}
 
 # Test for previous forwarder versions (Inception versions)
 $Inception = Test-Path "C:\Program Files\Stairwell\Inception"
 if($Inception -eq $True) {
     Write-Verbose "Found an Inception version forwarder, begining uninstall"
     try {
-        Get-Package "Inception Forwarder" | Uninstall-Package -AllVersions
+        Remove-CimInstance -Query "SELECT * from Win32_Product WHERE name LIKE 'Inception%'"
         Write-Output "Stairwell Forwarder Uninstalled"
         Exit
     }
@@ -42,16 +48,12 @@ if($Inception -eq $True) {
     
 }
 
-# Test for specific 1.4.x versions, these require several specific things to uninstall successfully.
-# First we need to determine which specific version is installed then download the installer bundle.
+# We test for specific 1.4.x versions, these require several specific things to uninstall successfully.
+# First we need to determine which version is installed then download the installer bundle.
 # Uninstallation w/the installer package is highly recommended, lots of problems otherwise.
 
-# Attempt to find our installed version of the forwarder
-$Package = Get-package "Stairwell Forwarder"
-$WmiObj = Get-WmiObject -Class Win32_Product -Filter "Name = 'Stairwell Forwarder'"
-
 # If this is a 1.4.x uninstall, ensure we have the required tokens
-if($WmiObj.version -eq "1.4.0.886" -or $Package.version -eq "1.4.0.886" -or $WmiObj.version -eq "1.4.1.896" -or $Package.version -eq "1.4.1.896") {
+if($FileVersion -eq "1.4.0.886" -or $FileVersion -eq "1.4.1.896") {
     # Check for needed creds
     if([string]::IsNullOrEmpty($MaintToken)) {
         Write-Verbose "Maintenance token not supplied, prompting user for value."
@@ -76,10 +78,10 @@ if($WmiObj.version -eq "1.4.0.886" -or $Package.version -eq "1.4.0.886" -or $Wmi
 # Begin the 1.4.x uninstall process...
 if([string]::IsNullOrEmpty($Installer)) {
     # Requesting the installer package to perform the uninstall right the first time even in the event of a previous borked uninstall
-    if($WmiObj.version -eq "1.4.0.886" -or $Package.version -eq "1.4.0.886") {        
+    if($FileVersion -eq "1.4.0.886") {        
         Write-Verbose "Found installed version 1.4.0, downloading bundled installer..."
         Invoke-WebRequest -Uri "https://downloads.stairwell.com/windows/1.4.0/StairwellForwarderBundle-1.4.0.886.exe" -OutFile "C:\Windows\Temp\StairwellForwarderBundle.exe"
-    } elseif($WmiObj.version -eq "1.4.1.896" -or $Package.version -eq "1.4.1.896") {
+    } elseif($FileVersion -eq "1.4.1.896") {
         Write-Verbose "Found installed version 1.4.1, downloading bundled installer..."
         Invoke-WebRequest -Uri "https://downloads.stairwell.com/windows/1.4.1/StairwellForwarderBundle-1.4.1.896.exe" -OutFile "C:\Windows\Temp\StairwellForwarderBundle.exe"
     } else {
